@@ -107,3 +107,115 @@ try {
       {"role": "user", "content": "Explain quantum computing in one sentence."}
     ]
   }
+
+## 12. Prompt Templates Integration
+- **Concept:** MeshAPI allows moving long system prompts and logic to server-side templates with dynamic variable interpolation `{{variable}}`.
+- **Usage in Chat Completions:** Instead of passing a long `"system"` message, use the `"template"` and `"variables"` fields in the POST body.
+- **Example Payload:**
+  ```json
+  {
+    "template": "my-custom-template-name",
+    "variables": {
+      "key1": "value1",
+      "key2": "value2"
+    },
+    "messages": [
+      { "role": "user", "content": "Process this data: {{data}}" }
+    ]
+  }
+
+## 14. Structured Output (Strict JSON Formatting)
+- **Concept:** Force the model to return syntactically valid JSON for predictable data extraction (vital for Playwright/Scraping workflows).
+- **Implementation:** Use the `response_format` parameter in `POST /v1/chat/completions`.
+- **Mode 1: `json_object`** - Simply returns JSON. Must instruct the model in the prompt to return JSON and specify desired keys.
+- **Mode 2: `json_schema` (RECOMMENDED FOR AGENTS)**
+  - Strictly enforces the output structure, field names, and data types.
+  - **Syntax:**
+    ```json
+    "response_format": {
+      "type": "json_schema",
+      "json_schema": {
+        "name": "data_extraction",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "keyName": { "type": "string" }
+          },
+          "required": ["keyName"],
+          "additionalProperties": false 
+        }
+      }
+    }
+    ```
+- **Crucial Tips for Structured Output:**
+  - Set `"temperature": 0` in the API call for deterministic outputs.
+  - Set `"additionalProperties": false` in the schema to prevent the model from hallucinating extra fields.
+  - The response will be a JSON string inside `choices[0].message.content`. It MUST be parsed client-side using `JSON.parse()`.
+
+## 15. Embeddings (Vector Generation for RAG)
+- **Concept:** Converts text strings into dense vector arrays (floats) for semantic search and Retrieval-Augmented Generation (RAG).
+- **Endpoint:** `POST https://api.meshapi.ai/v1/embeddings`
+- **JSON Body Structure:**
+  ```json
+  {
+    "model": "openai/text-embedding-3-small",
+    "input": ["String 1", "String 2"] // Send an array for batch embedding!
+  }
+
+## 16. RAG (Files & Semantic Search)
+- **Concept:** MeshAPI handles file chunking, embedding, and vector storage natively. No external vector DB (like Pinecone) is required.
+- **Workflow (3 Steps):**
+  1. **Upload (`POST /v1/files`):** Get a `signed_url` and PUT the raw file bytes to it immediately. Set `"embed": true`.
+  2. **Poll Status (`GET /v1/files/{file_id}`):** Wait until `"embedding_status"` is `"ready"`.
+  3. **Search (`POST /v1/files/search`):** Send a natural language `"query"` to retrieve relevant text chunks.
+- **End-to-End Chat Integration:**
+  - After searching, extract the text from the results: `const context = searchData.results.map(r => r.text).join("\n\n");`
+  - Pass this context into the `"system"` prompt of a standard Chat Completion request, instructing the model to answer based *only* on the provided context.
+- **Metadata Filtering:** Use the `"metadata"` object during upload (e.g., `{"department": "HR"}`) to later filter searches using the `"filter"` object.
+
+## 17. Audio Handling (Input & Output)
+- **Concept:** Send audio for transcription or request audio output from supported models.
+- **Audio Input (Base64):**
+  - Inside the `messages` array, add a content part with type `input_audio`.
+  - Format: `{"type": "input_audio", "input_audio": {"data": "<BASE64_STRING>", "format": "wav"}}`
+- **Audio Output:**
+  - Request both text and audio by adding `"modalities": ["text", "audio"]` to the main request body.
+  - Define voice settings: `"audio": {"voice": "alloy", "format": "wav"}`
+- **Audio Translation to English:**
+  - Use endpoint `POST /v1/audio/translations` to send audio in any language and receive an English text translation.
+  - Recommended model: `openai/whisper-large-v3`
+- **Important Note:** Always base64 encode audio payloads for Chat Completions. Keep file sizes optimized for performance.
+
+## 18. Speech-to-Text (STT) & Audio File Uploads
+- **Concept:** Convert audio files to text. Uses `multipart/form-data`, NOT JSON.
+- **Endpoints:**
+  - `POST /v1/audio/transcriptions` (Standard Transcription)
+  - `POST /v1/audio/transcriptions/translate` (Transcribe directly to English text, recommended model: `sarvam/saaras:v2`)
+- **Node.js Note:** Use native `FormData` or `form-data` package. Append the audio file as a Blob/Stream and pass the `"model"` field.
+
+## 19. Real-Time Streaming Audio (WebSockets)
+- **Concept:** Use WebSockets for live microphone transcription without waiting for the full recording to finish.
+- **Endpoint:** `WS wss://api.meshapi.ai/v1/audio/transcriptions/realtime?model=openai/whisper-large-v3&api_key=rsk_...`
+- **Protocol (OpenAI Compatible):**
+  - **Send to server:** `{ "type": "input_audio_buffer.append", "audio": "<BASE64_PCM_AUDIO>" }`
+  - **Receive from server (Interim text):** `{ "type": "conversation.item.input_audio_transcription.delta", "delta": "..." }`
+  - **Receive from server (Final text):** `{ "type": "conversation.item.input_audio_transcription.completed", "transcript": "..." }`
+- **Commit:** Send `{ "type": "input_audio_buffer.commit" }` to finalize an audio segment.
+
+
+## 20. Text-to-Speech (TTS) REST API
+- **Concept:** Convert text into audio files. Supports top brands like ElevenLabs and Kokoro natively.
+- **Endpoint:** `POST /v1/audio/speech`
+- **Payload Requirements:**
+  - `model`: Required (e.g., `"eleven_flash_v2_5"` or `"hexgrad/kokoro-82m"`).
+  - `input`: Required. The text string to synthesize.
+  - `voice`: Required for most. The specific Voice ID (can be fetched via `GET /v1/audio/voices`).
+  - `stream`: Set to `false` if you want to receive a complete file buffer (e.g., `response_format: "mp3_44100_128"`).
+
+## 21. Real-Time Streaming TTS (WebSockets)
+- **Concept:** Send text chunks as they arrive from an LLM to get instant audio bytes back, minimizing latency.
+- **Endpoint:** `WS wss://api.meshapi.ai/v1/audio/speech/stream/{voice_id}?model_id=hexgrad/kokoro-82m&api_key=rsk_...`
+- **Protocol (Standard Models like Kokoro/Cartesia):**
+  - **Send to server:** `{ "type": "input_text_buffer.append", "text": "chunk" }`
+  - **Receive from server:** `{ "type": "conversation.item.audio_output.delta", "delta": "<BASE64_AUDIO>" }`
+  - **Commit:** `{ "type": "input_text_buffer.commit" }`
