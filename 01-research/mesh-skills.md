@@ -219,3 +219,101 @@ try {
   - **Send to server:** `{ "type": "input_text_buffer.append", "text": "chunk" }`
   - **Receive from server:** `{ "type": "conversation.item.audio_output.delta", "delta": "<BASE64_AUDIO>" }`
   - **Commit:** `{ "type": "input_text_buffer.commit" }`
+
+## 22. Vision & Image Generation
+- **Concept:** Use `POST /v1/chat/completions` for both analyzing images (Vision) and creating images (Generation).
+- **Vision (Sending Images to AI):**
+  - Inside the `messages.content` array, mix text and image parts.
+  - Structure: `{"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,...", "detail": "auto"}}`
+  - *Best Practice:* Prefer Base64 encoding over public URLs for maximum compatibility across different provider models.
+- **Image Generation:**
+  - Select an image-capable model (check via `GET /v1/models`).
+  - Pass the prompt in the `messages` array.
+  - Add an `"image"` object to the root body: `{"size": "1024x1024", "quality": "high", "response_format": "url"}`
+
+## 23. Standalone Image Generation (OpenAI Compatible)
+- **Endpoint:** `POST /v1/images/generations`
+- **Concept:** Dedicated endpoint for generating images from text prompts.
+- **Payload Example:** 
+  ```json
+  {
+    "model": "openai/gpt-image-1",
+    "prompt": "A cinematic dark mode workspace with neon cyan accents",
+    "size": "1024x1024",
+    "stream": true
+  }
+
+
+* **Crucial Note on Streaming:** Set `"stream": true` for long-running generations. The API will send SSE (Server-Sent Events) with `: ping` to keep the HTTP connection alive, preventing frontend timeouts.
+* **Provider Quirks:** Vertex AI (`vertex/imagen-3`) strictly returns images in `b64_json` format, completely ignoring the `response_format` parameter.
+
+## 24. Image Editing & Transformations
+
+* **Endpoint:** `POST /v1/images/edits`
+* **Format:** Requires `multipart/form-data` (file uploads), NOT JSON.
+* **Key Form Fields:** `image` (the raw file), `prompt`, `model`, and `operation`.
+* **Supported Operations:**
+* `"remove_background"` (Great for automation pipelines)
+* `"upscale"` (Increase resolution)
+* `"outpaint"` / `"inpaint"`
+* **Error Handling:** If a chosen model does not support a specific operation, the API will return a `501 Not Implemented` status code.
+
+## 25. Async Video Generation
+- **Concept:** Video generation is asynchronous. You submit a task, get a Task ID, and either poll for completion or receive a webhook.
+- **Endpoints:** - Create: `POST /v1/video/generations`
+  - Status: `GET /v1/video/generations/{id}`
+- **Payload Structure (`POST /v1/video/generations`):**
+  - Requires a `content` array mixing modalities (e.g., `{"type": "text", "text": "..."}`, `{"type": "image_url", "image_url": {"url": "..."}}`).
+  - Key parameters: `duration` (in seconds), `ratio` (e.g., "16:9"), `resolution`.
+- **Polling Logic:** - Loop a `GET` request every 5-10 seconds until `status` is `"succeeded"`, `"failed"`, `"expired"`, or `"cancelled"`.
+  - On success, the video URL is located at `content.video_url`.
+- **Webhook Alternative:** Pass `"callback_url"` in the POST request to receive a server-side POST when the task reaches a terminal state.
+
+## 26. Multi-Model Compare Endpoint
+- **Concept:** Send a single prompt to multiple models concurrently and optionally receive a synthesized comparison.
+- **Endpoint:** `POST /v1/chat/compare`
+- **Payload Structure:**
+  - `models`: Array of model IDs (e.g., `["openai/gpt-4o-mini", "anthropic/claude-haiku-4.5"]`). Max 10.
+  - `messages`: Standard chat completion messages array.
+  - `skip_comparison`: Set to `true` if you only want the raw outputs from each model to display in your own UI side-by-side, skipping the synthesis LLM step.
+- **Streaming Modes:**
+  - If `stream: true` and `skip_comparison: true`: Tokens from all models stream concurrently, tagged by their respective model name.
+
+## 27. Batch API (Asynchronous Bulk Processing)
+- **Concept:** Process high-volume requests (e.g., hundreds of scraped articles) asynchronously to avoid rate limits and timeouts.
+- **Endpoints:**
+  - Create: `POST /v1/batches`
+  - Retrieve: `GET /v1/batches/{batch_id}`
+- **Payload Structure (`POST /v1/batches`):**
+  - `"completion_window"`: e.g., `"24h"`.
+  - `"requests"`: Array of objects. Each MUST have a unique `"custom_id"`, and the `"body"` must contain standard Chat Completions parameters.
+- **Strict Rule:** You CANNOT mix models within a single batch. All requests inside the `"requests"` array must target the exact same model.
+- **Status Flow:** Poll the retrieve endpoint until `"status"` is `"completed"`. The response will contain a `"results"` array matching your `"custom_id"`s.
+
+## 28. Auto Routing (`model: "auto"`)
+- **Concept:** Let Mesh API dynamically select the best upstream model based on the prompt's complexity and intent.
+- **Implementation:** Simply pass `"model": "auto"` in the standard Chat Completions or Embeddings payload.
+- **Response Metadata:** - To know which model was actually used, check the `x_resolved_model_id` field in the JSON response (non-streaming).
+  - For streaming, check the `X-Resolved-Model-Id` HTTP header.
+- **Fallback:** If the internal router times out, it automatically falls back to a reliable, cheap model and sets `x_auto_routed_fallback: true`.
+- **Cost Warning:** Using Auto Routing incurs charges for *both* the final inference model AND the internal classification model. Use strategically to avoid double-billing on high-volume background tasks.
+
+## 29. Realtime API (Bidirectional Speech-to-Speech)
+- **Concept:** Low-latency WebSocket gateway acting as a transparent proxy to OpenAI's Realtime API. Ideal for voice agents.
+- **Endpoint:** `wss://api.meshapi.ai/v1/realtime?model=openai/gpt-realtime-2`
+- **Authentication:**
+  - *Backend (Preferred):* `Sec-WebSocket-Protocol: openai-realtime, Bearer rsk_...`
+  - *Browser/Frontend:* Append `?api_key=rsk_...` to the URL.
+- **Protocol Flow (OpenAI Compatible):**
+  1. Client sends `session.update` (must use GA shape: `{"type":"realtime","output_modalities":["audio"],"audio":{...}}`).
+  2. Client streams Base64 PCM16 via `input_audio_buffer.append`.
+  3. Server streams Base64 audio back via `response.output_audio.delta`.
+- **Important Restrictions:**
+  - Requires a minimum account balance of $10 USD to open a session.
+  - Sessions hard-cap at 30 minutes.
+  - 60-second idle timeout.s
+
+## 30. Architecture & Error Handling Best Practices
+- **Automatic Failover:** The Mesh router natively handles upstream 5xx errors (e.g., OpenAI downtime) by retrying across alternative providers. Do NOT implement aggressive client-side retry loops (like `axios-retry`) for 5xx errors, as the gateway handles this.
+- **Privacy:** Mesh API employs a Zero-Storage Policy for completion content. Emphasize this in the application's UI/UX to build user trust when processing sensitive data.
+- **Latency Optimization:** The router automatically resolves requests to the nearest geographic cloud region.
