@@ -15,6 +15,7 @@ export async function POST(request) {
       );
     }
 
+    /*
     // Construct FormData to send to Mesh API
     const meshFormData = new FormData();
     // Append the file and specify the model requested: sarvam/saaras:v2
@@ -56,6 +57,33 @@ export async function POST(request) {
         { error: 'Transcription result was empty.' },
         { status: 500 }
       );
+    }
+    */
+
+    // --- MOCK MODE: Bypass Mesh API and return mock transcription ---
+    // Simulate a 2-second network latency
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const transcribedText = "मेरा पैन कार्ड खो गया है, नया कैसे बनवाएं?";
+
+    // Save user query message to MongoDB database log
+    try {
+      await dbConnect();
+      let user = await UserProfile.findOne();
+      if (!user) {
+        user = new UserProfile({
+          name: 'Rural User',
+          language: 'hi-IN',
+          locationType: 'village',
+          conversationHistory: [],
+        });
+      }
+      user.conversationHistory.push({
+        role: 'user',
+        content: transcribedText,
+      });
+      await user.save();
+    } catch (dbError) {
+      console.error('Failed to log transcription to database:', dbError);
     }
 
     return NextResponse.json({ text: transcribedText });
