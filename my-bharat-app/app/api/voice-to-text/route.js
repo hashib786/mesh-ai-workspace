@@ -58,33 +58,6 @@ export async function POST(request) {
       );
     }
 
-    // MongoDB operations: Connect and push to dummy user history
-    try {
-      await dbConnect();
-
-      // Find first user or create a default dummy user
-      let user = await UserProfile.findOne();
-      if (!user) {
-        user = new UserProfile({
-          name: 'Rural User',
-          language: 'hi-IN',
-          locationType: 'village',
-          conversationHistory: [],
-        });
-      }
-
-      // Push transcription text to conversationHistory as a "user" message
-      user.conversationHistory.push({
-        role: 'user',
-        content: transcribedText,
-      });
-
-      await user.save();
-    } catch (dbError) {
-      // Log the database error but do not fail the transcription request
-      console.error('Failed to log transcription to database:', dbError);
-    }
-
     return NextResponse.json({ text: transcribedText });
   } catch (error) {
     console.error('Error in voice-to-text API route:', error);
