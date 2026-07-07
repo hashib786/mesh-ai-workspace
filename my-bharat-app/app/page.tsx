@@ -15,10 +15,11 @@ export default function Home() {
   const [error, setError] = useState<string>("");
   const [isStarted, setIsStarted] = useState<boolean>(false);
   const [activeSpeechIndex, setActiveSpeechIndex] = useState<number | null>(null);
+  const [waitAudioUrl, setWaitAudioUrl] = useState<string | null>(null);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Load persistent chat history from database on load
+  // Load persistent chat history and prefetch wait voice on load
   useEffect(() => {
     async function loadHistory() {
       try {
@@ -35,7 +36,26 @@ export default function Home() {
         console.error("Failed to load chat history:", err);
       }
     }
+
+    async function prefetchWaitVoice() {
+      try {
+        const response = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: "थोड़ा इंतज़ार करिएगा..." }),
+        });
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          setWaitAudioUrl(url);
+        }
+      } catch (err) {
+        console.error("Failed to prefetch wait voice:", err);
+      }
+    }
+
     loadHistory();
+    prefetchWaitVoice();
   }, []);
 
   // Cleanup audio on unmount
@@ -44,8 +64,46 @@ export default function Home() {
       if (audioRef.current) {
         audioRef.current.pause();
       }
+      if (waitAudioUrl) {
+        URL.revokeObjectURL(waitAudioUrl);
+      }
     };
-  }, []);
+  }, [waitAudioUrl]);
+
+  const playAudioUrl = (url: string, index: number | null) => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    const audio = new Audio(url);
+    audioRef.current = audio;
+
+    if (index !== null) {
+      setActiveSpeechIndex(index);
+      audio.onended = () => {
+        setActiveSpeechIndex(null);
+        audioRef.current = null;
+      };
+      audio.onerror = () => {
+        setActiveSpeechIndex(null);
+        audioRef.current = null;
+      };
+    } else {
+      audio.onended = () => {
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
+      };
+      audio.onerror = () => {
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
+      };
+    }
+
+    audio.play().catch((err) => console.error("Audio playback failed:", err));
+  };
 
   const speakText = async (text: string, index: number) => {
     if (!text) return;
@@ -57,11 +115,6 @@ export default function Home() {
       }
       setActiveSpeechIndex(null);
       return;
-    }
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
     }
 
     try {
@@ -78,20 +131,7 @@ export default function Home() {
 
       const blob = await response.blob();
       const audioUrl = URL.createObjectURL(blob);
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-
-      audio.onended = () => {
-        setActiveSpeechIndex(null);
-        audioRef.current = null;
-      };
-
-      audio.onerror = () => {
-        setActiveSpeechIndex(null);
-        audioRef.current = null;
-      };
-
-      await audio.play();
+      playAudioUrl(audioUrl, index);
     } catch (err) {
       console.error("TTS playback error:", err);
       setActiveSpeechIndex(null);
@@ -132,12 +172,16 @@ export default function Home() {
   const handleTranscriptionComplete = async (text: string) => {
     setError("");
     
-    // Stop any playing TTS audio
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
+    // Play "thoda intejar kariyega" wait voice instantly if loaded
+    if (waitAudioUrl) {
+      playAudioUrl(waitAudioUrl, null);
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setActiveSpeechIndex(null);
     }
-    setActiveSpeechIndex(null);
 
     // 1. Instantly show user message in local history
     setConversationHistory((prev) => [...prev, { role: "user", content: text } as Message]);
@@ -157,13 +201,14 @@ export default function Home() {
         throw new Error(data.error || "सहायक से जवाब पाने में विफलता (Failed to receive AI response)");
       }
 
-      // 3. Show AI response in conversation and trigger TTS play
+      // 3. Show AI response in conversation and trigger TTS play outside updater function
       if (data.response) {
+        let newIndex = 0;
         setConversationHistory((prev) => {
-          const updated: Message[] = [...prev, { role: "assistant", content: data.response } as Message];
-          speakText(data.response, updated.length - 1);
-          return updated;
+          newIndex = prev.length;
+          return [...prev, { role: "assistant", content: data.response } as Message];
         });
+        speakText(data.response, newIndex);
       }
     } catch (err: any) {
       console.error("Chat Agent Error:", err);

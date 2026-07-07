@@ -12,7 +12,7 @@ export async function POST(request) {
     const payload = {
       model: 'sarvam/bulbul:v3',
       input: text,
-      voice: 'alloy',
+      voice: 'aditya',
     };
 
     const response = await fetch('https://api.meshapi.ai/v1/audio/speech', {
