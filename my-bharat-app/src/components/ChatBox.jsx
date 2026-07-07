@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 export default function ChatBox({ messages, isAiTyping }) {
   const messagesEndRef = useRef(null);
@@ -70,13 +71,27 @@ export default function ChatBox({ messages, isAiTyping }) {
               >
                 {/* Bubble content */}
                 <div
-                  className={`p-4 rounded-2xl text-base font-medium shadow-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`p-4 rounded-2xl text-base font-medium shadow-sm leading-relaxed ${
                     isUser
-                      ? "bg-sky-100 text-sky-950 rounded-br-none"
+                      ? "bg-sky-100 text-sky-950 rounded-br-none whitespace-pre-wrap"
                       : "bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-bl-none"
                   }`}
                 >
-                  {msg.content}
+                  {isUser ? (
+                    msg.content
+                  ) : (
+                    <ReactMarkdown
+                      components={{
+                        p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2" {...props} />,
+                        li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+                        strong: ({ node, ...props }) => <strong className="font-bold text-emerald-950" {...props} />
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  )}
                 </div>
 
                 {/* Bubble Action buttons */}

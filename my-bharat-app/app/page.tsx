@@ -90,7 +90,7 @@ export default function Home() {
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-100 rounded-full filter blur-2xl opacity-40 -ml-16 -mb-16"></div>
 
           {/* App Header Banner */}
-          <div className="text-center mb-6 w-full">
+          <div className="text-center mb-6 w-full sticky top-0 z-50 bg-white/90 backdrop-blur-md py-3">
             <h1 className="text-4xl font-extrabold tracking-tight text-slate-800 flex items-center justify-center gap-2">
               <span className="text-[#FF9933]">जन</span>
               <span className="text-slate-400 font-light">-</span>
