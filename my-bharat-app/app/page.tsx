@@ -15,11 +15,10 @@ export default function Home() {
   const [error, setError] = useState<string>("");
   const [isStarted, setIsStarted] = useState<boolean>(false);
   const [activeSpeechIndex, setActiveSpeechIndex] = useState<number | null>(null);
-  const [waitAudioUrl, setWaitAudioUrl] = useState<string | null>(null);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Load persistent chat history and prefetch wait voice on load
+  // Load persistent chat history on load
   useEffect(() => {
     async function loadHistory() {
       try {
@@ -36,26 +35,7 @@ export default function Home() {
         console.error("Failed to load chat history:", err);
       }
     }
-
-    async function prefetchWaitVoice() {
-      try {
-        const response = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: "थोड़ा इंतज़ार करिएगा..." }),
-        });
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
-          setWaitAudioUrl(url);
-        }
-      } catch (err) {
-        console.error("Failed to prefetch wait voice:", err);
-      }
-    }
-
     loadHistory();
-    prefetchWaitVoice();
   }, []);
 
   // Cleanup audio on unmount
@@ -64,17 +44,19 @@ export default function Home() {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      if (waitAudioUrl) {
-        URL.revokeObjectURL(waitAudioUrl);
-      }
     };
-  }, [waitAudioUrl]);
+  }, []);
 
-  const playAudioUrl = (url: string, index: number | null) => {
+  const stopPlayback = () => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
+    setActiveSpeechIndex(null);
+  };
+
+  const playAudioUrl = (url: string, index: number | null) => {
+    stopPlayback();
 
     const audio = new Audio(url);
     audioRef.current = audio;
@@ -105,33 +87,123 @@ export default function Home() {
     audio.play().catch((err) => console.error("Audio playback failed:", err));
   };
 
+  // Helper function to split text into sentence-sized chunks under maxLen characters
+  const splitTextIntoSentenceChunks = (text: string, maxLen: number = 400): string[] => {
+    const sentences = text.split(/([।!?\n.।]+)/);
+    const chunks: string[] = [];
+    let currentChunk = "";
+
+    for (let i = 0; i < sentences.length; i++) {
+      let part = sentences[i];
+      if (!part) continue;
+
+      if (part.length > maxLen) {
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+          currentChunk = "";
+        }
+        const words = part.split(/(\s+)/);
+        for (const word of words) {
+          if ((currentChunk + word).length > maxLen) {
+            if (currentChunk.trim()) {
+              chunks.push(currentChunk.trim());
+            }
+            currentChunk = word;
+          } else {
+            currentChunk += word;
+          }
+        }
+      } else if ((currentChunk + part).length > maxLen) {
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+        }
+        currentChunk = part;
+      } else {
+        currentChunk += part;
+      }
+    }
+
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+
+    return chunks;
+  };
+
   const speakText = async (text: string, index: number) => {
     if (!text) return;
 
     if (activeSpeechIndex === index) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      setActiveSpeechIndex(null);
+      stopPlayback();
       return;
     }
 
+    stopPlayback();
+
+    const chunks = splitTextIntoSentenceChunks(text, 400);
+    if (chunks.length === 0) return;
+
     try {
       setActiveSpeechIndex(index);
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
+      let currentChunkIndex = 0;
 
-      if (!response.ok) {
-        throw new Error("Failed to synthesize speech");
-      }
+      const playNextChunk = async () => {
+        // Guard check: if user clicked stop or started another query, abort!
+        if (activeSpeechIndex !== index) {
+          return;
+        }
 
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
-      playAudioUrl(audioUrl, index);
+        if (currentChunkIndex >= chunks.length) {
+          setActiveSpeechIndex(null);
+          audioRef.current = null;
+          return;
+        }
+
+        const chunkText = chunks[currentChunkIndex];
+        currentChunkIndex++;
+
+        try {
+          const response = await fetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: chunkText }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to synthesize speech chunk");
+          }
+
+          const blob = await response.blob();
+          const audioUrl = URL.createObjectURL(blob);
+
+          if (activeSpeechIndex !== index) {
+            URL.revokeObjectURL(audioUrl);
+            return;
+          }
+
+          const audio = new Audio(audioUrl);
+          audioRef.current = audio;
+
+          audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            playNextChunk();
+          };
+
+          audio.onerror = () => {
+            URL.revokeObjectURL(audioUrl);
+            setActiveSpeechIndex(null);
+            audioRef.current = null;
+          };
+
+          await audio.play();
+        } catch (err) {
+          console.error("Error playing chunk:", err);
+          setActiveSpeechIndex(null);
+          audioRef.current = null;
+        }
+      };
+
+      await playNextChunk();
     } catch (err) {
       console.error("TTS playback error:", err);
       setActiveSpeechIndex(null);
@@ -142,52 +214,32 @@ export default function Home() {
   const handleStartConversation = async () => {
     setError("");
     
-    // 1. Pick a random greeting
-    const greetings = [
-      "नमस्ते! मेरा नाम अंजलि है, मैं 24 साल की हूँ। क्या मैं आपका नाम और उम्र जान सकती हूँ?",
-      "प्रणाम! मैं अंजलि हूँ, आपकी सरकारी गाइड। आपकी उम्र क्या है, और मैं आपकी क्या मदद कर सकती हूँ?",
-      "हेलो! मेरा नाम अंजलि है। आप मुझे अपनी उम्र और नाम बताएँ, फिर हम काम की बात शुरू करते हैं।"
-    ];
-    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    const initialGreetingText = "नमस्ते! मेरा नाम अंजलि है, मैं 24 साल की हूँ। क्या मैं आपका नाम और उम्र जान सकती हूँ?";
 
-    // 2. Clear history and initialize database in one call
     try {
       await fetch("/api/chat", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ greeting: randomGreeting }),
+        body: JSON.stringify({ greeting: initialGreetingText }),
       });
     } catch (err) {
       console.error("Failed to reset and initialize chat history:", err);
     }
 
-    // 3. Update client state
-    setConversationHistory([{ role: "assistant", content: randomGreeting } as Message]);
+    setConversationHistory([{ role: "assistant", content: initialGreetingText } as Message]);
     setIsStarted(true);
 
-    // 4. Play greeting immediately
-    speakText(randomGreeting, 0);
+    playAudioUrl('/audio/greeting.wav', 0);
   };
 
   const handleTranscriptionComplete = async (text: string) => {
     setError("");
     
-    // Play "thoda intejar kariyega" wait voice instantly if loaded
-    if (waitAudioUrl) {
-      playAudioUrl(waitAudioUrl, null);
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      setActiveSpeechIndex(null);
-    }
+    playAudioUrl('/audio/wait.wav', null);
 
-    // 1. Instantly show user message in local history
     setConversationHistory((prev) => [...prev, { role: "user", content: text } as Message]);
     setIsAiTyping(true);
 
-    // 2. POST query to AI Chat Agent endpoint
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -201,7 +253,6 @@ export default function Home() {
         throw new Error(data.error || "सहायक से जवाब पाने में विफलता (Failed to receive AI response)");
       }
 
-      // 3. Show AI response in conversation and trigger TTS play outside updater function
       if (data.response) {
         let newIndex = 0;
         setConversationHistory((prev) => {
@@ -227,11 +278,7 @@ export default function Home() {
       console.error("Failed to clear chat history:", err);
     }
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    setActiveSpeechIndex(null);
+    stopPlayback();
     setConversationHistory([]);
     setError("");
     setIsStarted(false);
