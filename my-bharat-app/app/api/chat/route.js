@@ -56,7 +56,6 @@ export async function POST(request) {
       await user.save();
     }
 
-    /*
     // Format previous messages cleanly for the Mesh API request payload
     const formattedHistory = user.conversationHistory.map(msg => ({
       role: msg.role === 'assistant' ? 'assistant' : 'user',
@@ -100,12 +99,6 @@ export async function POST(request) {
 
       return NextResponse.json({ error: 'AI returned an empty response.' }, { status: 500 });
     }
-    */
-
-    // --- MOCK MODE: Bypass Mesh completions and return mock Hindi response ---
-    // Simulate a 2-second network latency
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const aiText = "नमस्ते! पैन कार्ड दोबारा बनवाने के लिए आपको NSDL की आधिकारिक वेबसाइट पर 'Reprint PAN' के लिए अप्लाई करना होगा। इसकी सरकारी फीस मात्र 50 रुपये है। ध्यान रहे, किसी भी अनजान व्यक्ति या दलाल को इससे ज्यादा पैसे न दें, वे आपके साथ धोखाधड़ी कर सकते हैं।";
 
     // 3. Save AI response to Mongoose History
     user.conversationHistory.push({

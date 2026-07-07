@@ -15,12 +15,11 @@ export async function POST(request) {
       );
     }
 
-    /*
     // Construct FormData to send to Mesh API
     const meshFormData = new FormData();
-    // Append the file and specify the model requested: sarvam/saaras:v2
+    // Append the file and specify the model requested: sarvam/saaras:v3
     meshFormData.append('file', file, file.name || 'audio.wav');
-    meshFormData.append('model', 'sarvam/saaras:v2');
+    meshFormData.append('model', 'sarvam/saaras:v3');
 
     // Call the Mesh API audio transcription endpoint
     const meshResponse = await fetch('https://api.meshapi.ai/v1/audio/transcriptions', {
@@ -58,12 +57,6 @@ export async function POST(request) {
         { status: 500 }
       );
     }
-    */
-
-    // --- MOCK MODE: Bypass Mesh API and return mock transcription ---
-    // Simulate a 2-second network latency
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const transcribedText = "मेरा पैन कार्ड खो गया है, नया कैसे बनवाएं?";
 
     // Save user query message to MongoDB database log
     try {
