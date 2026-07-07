@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
-export default function ChatBox({ messages, isAiTyping }) {
+export default function ChatBox({ messages, isAiTyping, activeSpeechIndex, speakText }) {
   const messagesEndRef = useRef(null);
-  const [activeSpeechIndex, setActiveSpeechIndex] = useState(null);
   const [copiedIndex, setCopiedIndex] = useState(null);
 
   // Auto scroll to bottom when messages or typing state changes
@@ -13,38 +12,12 @@ export default function ChatBox({ messages, isAiTyping }) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isAiTyping]);
 
-  const speakText = (text, index) => {
-    if (!text) return;
-    if (activeSpeechIndex === index) {
-      window.speechSynthesis.cancel();
-      setActiveSpeechIndex(null);
-      return;
-    }
-
-    window.speechSynthesis.cancel(); // Stop any current speech
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "hi-IN"; // Native Hindi voice engine
-
-    utterance.onstart = () => setActiveSpeechIndex(index);
-    utterance.onend = () => setActiveSpeechIndex(null);
-    utterance.onerror = () => setActiveSpeechIndex(null);
-
-    window.speechSynthesis.speak(utterance);
-  };
-
   const copyToClipboard = (text, index) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
   };
-
-  useEffect(() => {
-    return () => {
-      // Cancel speech on component unmount
-      window.speechSynthesis.cancel();
-    };
-  }, []);
 
   return (
     <div className="w-full flex flex-col">
@@ -69,39 +42,50 @@ export default function ChatBox({ messages, isAiTyping }) {
                   isUser ? "self-end items-end" : "self-start items-start"
                 }`}
               >
-                {/* Bubble content */}
-                <div
-                  className={`p-4 rounded-2xl text-base font-medium shadow-sm leading-relaxed ${
-                    isUser
-                      ? "bg-sky-100 text-sky-950 rounded-br-none whitespace-pre-wrap"
-                      : "bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-bl-none"
-                  }`}
-                >
-                  {isUser ? (
-                    msg.content
-                  ) : (
-                    <ReactMarkdown
-                      components={{
-                        p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
-                        ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2" {...props} />,
-                        ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2" {...props} />,
-                        li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                        strong: ({ node, ...props }) => <strong className="font-bold text-emerald-950" {...props} />
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
+                {/* Bubble content and soundwave container */}
+                <div className="flex items-center gap-2 w-full">
+                  <div
+                    className={`p-4 rounded-2xl text-base font-medium shadow-sm leading-relaxed ${
+                      isUser
+                        ? "bg-sky-100 text-sky-950 rounded-br-none whitespace-pre-wrap"
+                        : "bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-bl-none"
+                    }`}
+                  >
+                    {isUser ? (
+                      msg.content
+                    ) : (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                          ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-2" {...props} />,
+                          ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-2" {...props} />,
+                          li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+                          strong: ({ node, ...props }) => <strong className="font-bold text-emerald-950" {...props} />
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
+                  </div>
+
+                  {/* soundwave playing indicator for AI bubble */}
+                  {!isUser && activeSpeechIndex === index && (
+                    <div className="flex items-end gap-[3px] h-5 justify-center bg-emerald-50 border border-emerald-100 rounded-full shadow-sm px-2 py-1.5 shrink-0 self-center">
+                      <span className="w-[3px] bg-emerald-600 rounded-full animate-soundwave-1 h-1"></span>
+                      <span className="w-[3px] bg-emerald-600 rounded-full animate-soundwave-2 h-1"></span>
+                      <span className="w-[3px] bg-emerald-600 rounded-full animate-soundwave-3 h-1"></span>
+                    </div>
                   )}
                 </div>
 
                 {/* Bubble Action buttons */}
                 <div className="flex gap-2.5 mt-1 px-1">
-                  {/* Read Aloud (Only for AI or all) */}
+                  {/* Read Aloud (Only for AI) */}
                   {!isUser && (
                     <button
                       onClick={() => speakText(msg.content, index)}
-                      className={`text-[10px] font-bold transition-all ${
-                        activeSpeechIndex === index ? "text-red-500" : "text-sky-600 hover:text-sky-700"
+                      className={`text-[10px] font-bold transition-all cursor-pointer ${
+                        activeSpeechIndex === index ? "text-red-500 hover:text-red-600" : "text-sky-600 hover:text-sky-700"
                       }`}
                       title={activeSpeechIndex === index ? "रोकें (Stop)" : "सुनें (Listen)"}
                     >
@@ -112,7 +96,7 @@ export default function ChatBox({ messages, isAiTyping }) {
                   {/* Copy Button */}
                   <button
                     onClick={() => copyToClipboard(msg.content, index)}
-                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 transition-all"
+                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
                     title="Copy text"
                   >
                     {copiedIndex === index ? "कॉपी हुआ!" : "कॉपी करें (Copy)"}

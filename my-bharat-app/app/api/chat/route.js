@@ -122,3 +122,26 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Internal Server Error: ' + error.message }, { status: 500 });
   }
 }
+
+// DELETE: Clears the conversation history from the database and optionally adds a greeting
+export async function DELETE(request) {
+  try {
+    const { greeting } = await request.json().catch(() => ({}));
+    await dbConnect();
+    let user = await UserProfile.findOne();
+    if (user) {
+      user.conversationHistory = [];
+      if (greeting) {
+        user.conversationHistory.push({
+          role: 'assistant',
+          content: greeting
+        });
+      }
+      await user.save();
+    }
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Failed to clear chat history:', error);
+    return NextResponse.json({ error: 'Failed to clear conversation history' }, { status: 500 });
+  }
+}
