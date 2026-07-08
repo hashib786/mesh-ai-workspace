@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 
 export default function Navbar() {
   return (
@@ -20,18 +21,27 @@ export default function Navbar() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-4">
-          <Link
-            href="/app"
-            className="text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors"
-          >
-            Login
-          </Link>
-          <Link
-            href="/app"
-            className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all transform active:scale-95 duration-200"
-          >
-            Sign Up
-          </Link>
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <button className="text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">
+                Login
+              </button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all transform active:scale-95 duration-200 cursor-pointer">
+                Sign Up
+              </button>
+            </SignUpButton>
+          </Show>
+          <Show when="signed-in">
+            <Link
+              href="/app"
+              className="text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer mr-2"
+            >
+              Go to Dashboard
+            </Link>
+            <UserButton />
+          </Show>
         </div>
       </div>
     </header>

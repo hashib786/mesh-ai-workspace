@@ -10,6 +10,7 @@
     "gen-icon": "node scripts/generate-favicon.js"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.5.14",
     "mongoose": "^9.7.3",
     "next": "16.2.10",
     "react": "19.2.4",

@@ -4,6 +4,7 @@ import VoiceRecorder from "@/src/components/VoiceRecorder";
 import ChatBox from "@/src/components/ChatBox";
 import useTtsPlayer from "@/src/hooks/useTtsPlayer";
 import useChatHistory from "@/src/hooks/useChatHistory";
+import { UserButton } from "@clerk/nextjs";
 
 export default function Home() {
   const { activeSpeechIndex, speakText, playAudioUrl, stopPlayback } = useTtsPlayer();
@@ -40,6 +41,10 @@ export default function Home() {
       <main className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
         <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-sky-100/50 p-6 md:p-8 flex flex-col items-center relative overflow-hidden">
           
+          {/* Clerk Profile Control */}
+          <div className="absolute top-4 right-4 z-[60]">
+            <UserButton />
+          </div>
           {/* Subtle design accents */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-sky-100 rounded-full filter blur-2xl opacity-40 -mr-16 -mt-16"></div>
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-100 rounded-full filter blur-2xl opacity-40 -ml-16 -mb-16"></div>
