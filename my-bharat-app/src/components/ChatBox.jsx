@@ -103,9 +103,9 @@ export default function ChatBox({ messages, isAiTyping, activeSpeechIndex, speak
                   </button>
 
                   {/* Cost display */}
-                  {!isUser && (
+                  {!isUser && msg.cost !== undefined && msg.cost > 0 && (
                     <span className="text-[10px] text-slate-400 font-medium select-none">
-                      • लागत (Cost): $0.005
+                      • लागत (Cost): ${msg.cost.toFixed(3)}
                     </span>
                   )}
                 </div>

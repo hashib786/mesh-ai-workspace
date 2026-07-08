@@ -8,6 +8,10 @@ const MessageSchema = new mongoose.Schema({
   content: {
     type: String,
     required: true
+  },
+  cost: {
+    type: Number,
+    default: 0
   }
 }, { _id: false });
 

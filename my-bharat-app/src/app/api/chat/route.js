@@ -161,7 +161,8 @@ export async function POST(request) {
     // 6. Save AI response to session
     session.messages.push({
       role: 'assistant',
-      content: aiText
+      content: aiText,
+      cost: 0.005
     });
     await session.save();
 
