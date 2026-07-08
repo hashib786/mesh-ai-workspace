@@ -23,6 +23,14 @@ const UserProfileSchema = new mongoose.Schema({
   email: {
     type: String
   },
+  creditsUsed: {
+    type: Number,
+    default: 0
+  },
+  creditLimit: {
+    type: Number,
+    default: 0.10
+  },
   language: {
     type: String,
     default: 'hi-IN'

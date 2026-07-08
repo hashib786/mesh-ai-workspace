@@ -1,56 +1,79 @@
 import { useState, useEffect } from "react";
 
-export default function useChatHistory({ playAudioUrl, speakText }) {
+export default function useChatHistory({ playAudioUrl, speakText, stopPlayback }) {
   const [conversationHistory, setConversationHistory] = useState([]);
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [error, setError] = useState("");
   const [isStarted, setIsStarted] = useState(false);
 
-  // Load persistent chat history on load
-  useEffect(() => {
-    async function loadHistory() {
-      try {
-        const response = await fetch("/api/chat");
-        const data = await response.json();
-        if (response.ok && data.history) {
-          setConversationHistory(data.history);
-          if (data.history.length > 0) {
-            setIsStarted(true);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to load chat history:", err);
+  const [activeChatId, setActiveChatId] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [creditsUsed, setCreditsUsed] = useState(0);
+  const [creditLimit, setCreditLimit] = useState(0.10);
+
+  const fetchCreditsAndSessions = async () => {
+    try {
+      const syncRes = await fetch("/api/auth/sync");
+      const syncData = await syncRes.json();
+      if (syncRes.ok && syncData.user) {
+        setCreditsUsed(syncData.user.creditsUsed || 0);
+        setCreditLimit(syncData.user.creditLimit || 0.10);
       }
+      const sessionsRes = await fetch("/api/chats");
+      const sessionsData = await sessionsRes.json();
+      if (sessionsRes.ok && sessionsData.sessions) {
+        setSessions(sessionsData.sessions);
+      }
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err);
     }
-    loadHistory();
+  };
+
+  useEffect(() => {
+    fetchCreditsAndSessions();
   }, []);
+
+  const selectChatSession = async (id) => {
+    setError("");
+    if (stopPlayback) stopPlayback();
+    if (!id) {
+      setActiveChatId(null);
+      setConversationHistory([]);
+      setIsStarted(false);
+      return;
+    }
+    setActiveChatId(id);
+    try {
+      const res = await fetch(`/api/chats/${id}`);
+      const data = await res.json();
+      if (res.ok) {
+        setConversationHistory(data.messages || []);
+        setIsStarted(true);
+      }
+    } catch (err) {
+      console.error("Failed to load chat session:", err);
+    }
+  };
+
+  const startNewChat = () => {
+    if (stopPlayback) stopPlayback();
+    setActiveChatId(null);
+    setConversationHistory([]);
+    setIsStarted(false);
+    setError("");
+  };
 
   const handleStartConversation = async () => {
     setError("");
-    
-    const initialGreetingText = "नमस्ते! मेरा नाम सुहानी है, मैं 24 साल की हूँ। क्या मैं आपका नाम और उम्र जान सकती हूँ?";
-
-    try {
-      await fetch("/api/chat", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ greeting: initialGreetingText }),
-      });
-    } catch (err) {
-      console.error("Failed to reset and initialize chat history:", err);
-    }
-
-    setConversationHistory([{ role: "assistant", content: initialGreetingText }]);
+    const greetingText = "नमस्ते! मेरा नाम सुहानी है, मैं 24 साल की हूँ। क्या मैं आपका नाम और उम्र जान सकती हूँ?";
+    setConversationHistory([{ role: "assistant", content: greetingText }]);
     setIsStarted(true);
-
     playAudioUrl('/audio/greeting.wav', 0);
   };
 
   const handleTranscriptionComplete = async (text) => {
     setError("");
-    
     playAudioUrl('/audio/wait.wav', null);
-
     setConversationHistory((prev) => [...prev, { role: "user", content: text }]);
     setIsAiTyping(true);
 
@@ -58,15 +81,16 @@ export default function useChatHistory({ playAudioUrl, speakText }) {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, chatId: activeChatId }),
       });
-
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "सहायक से जवाब पाने में विफलता (Failed to receive AI response)");
+      if (response.status === 403) {
+        throw new Error(data.error || "माफ़ करें, आपकी फ्री क्रेडिट लिमिट ($0.10) खत्म हो गई है।");
       }
-
+      if (!response.ok) {
+        throw new Error(data.error || "सहायक से जवाब पाने में विफलता");
+      }
       if (data.response) {
         let newIndex = 0;
         setConversationHistory((prev) => {
@@ -75,26 +99,24 @@ export default function useChatHistory({ playAudioUrl, speakText }) {
         });
         speakText(data.response, newIndex);
       }
+      if (data.chatId && data.chatId !== activeChatId) {
+        setActiveChatId(data.chatId);
+      }
+      await fetchCreditsAndSessions();
     } catch (err) {
       console.error("Chat Agent Error:", err);
-      setError(
-        err.message || "सर्वर से कनेक्ट करने में त्रुटि। कृपया पुनः प्रयास करें। (Failed to connect to chat agent.)"
-      );
+      setError(err.message || "सर्वर से कनेक्ट करने में त्रुटि।");
     } finally {
       setIsAiTyping(false);
     }
   };
 
-  const clearChatHistory = async () => {
-    try {
-      await fetch("/api/chat", { method: "DELETE" });
-    } catch (err) {
-      console.error("Failed to clear chat history:", err);
-    }
-
+  const clearChatHistory = () => {
     setConversationHistory([]);
     setError("");
     setIsStarted(false);
+    setActiveChatId(null);
+    fetchCreditsAndSessions();
   };
 
   return {
@@ -106,5 +128,11 @@ export default function useChatHistory({ playAudioUrl, speakText }) {
     handleStartConversation,
     handleTranscriptionComplete,
     clearChatHistory,
+    activeChatId,
+    sessions,
+    creditsUsed,
+    creditLimit,
+    selectChatSession,
+    startNewChat,
   };
 }

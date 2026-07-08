@@ -22,7 +22,7 @@ export default function ChatBox({ messages, isAiTyping, activeSpeechIndex, speak
   return (
     <div className="w-full flex flex-col">
       {/* Scrollable messages area */}
-      <div className="w-full h-80 overflow-y-auto px-1 py-3 space-y-4 flex flex-col scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+      <div className="w-full h-48 md:h-56 overflow-y-auto px-1 py-3 space-y-4 flex flex-col scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 select-none py-10">
             <svg className="h-10 w-10 stroke-current opacity-40 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth="1.5">

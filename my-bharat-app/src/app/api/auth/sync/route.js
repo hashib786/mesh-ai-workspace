@@ -35,9 +35,25 @@ export async function GET() {
       });
     }
 
+    // Ensure defaults are present for legacy users
+    if (dbUser.creditsUsed === undefined || dbUser.creditsUsed === null) {
+      dbUser.creditsUsed = 0;
+    }
+    if (dbUser.creditLimit === undefined || dbUser.creditLimit === null) {
+      dbUser.creditLimit = 0.10;
+    }
+    if (dbUser.isModified()) {
+      await dbUser.save();
+    }
+
     return NextResponse.json({
       success: true,
-      user: { name: dbUser.name, email: dbUser.email },
+      user: {
+        name: dbUser.name,
+        email: dbUser.email,
+        creditsUsed: dbUser.creditsUsed,
+        creditLimit: dbUser.creditLimit,
+      },
     });
   } catch (error) {
     console.error("Error in sync API route:", error);

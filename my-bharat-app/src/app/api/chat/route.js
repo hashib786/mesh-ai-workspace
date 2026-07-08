@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import dbConnect from '@/src/lib/db';
 import UserProfile from '@/src/models/UserProfile';
+import ChatSession from '@/src/models/ChatSession';
 import { meshConfig } from '@/src/lib/meshClient';
+import crypto from 'crypto';
 
 const SYSTEM_PROMPT = `You are 'Suhani', a 24-year-old helpful and respectful village girl from India. You guide rural people regarding government documents (Aadhar, PAN, Passport) in pure, simple Hindi.
 Follow these Strict Behavioral Rules:
@@ -44,35 +46,81 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { text } = body;
+    const { text, chatId } = body;
 
     if (!text) {
       return NextResponse.json({ error: 'User query text is required' }, { status: 400 });
     }
 
     await dbConnect();
+
+    // 1. Fetch UserProfile and check credit limit
     let user = await UserProfile.findOne({ clerkUserId: userId });
     if (!user) {
       return NextResponse.json({ error: 'User profile not initialized.' }, { status: 400 });
     }
 
-    // 1. Save new user message to Mongoose History if it was not already logged by STT
-    const lastMsg = user.conversationHistory[user.conversationHistory.length - 1];
-    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== text) {
-      user.conversationHistory.push({
-        role: 'user',
-        content: text
-      });
-      await user.save();
+    if ((user.creditsUsed || 0) >= (user.creditLimit || 0.10)) {
+      return NextResponse.json(
+        { error: 'माफ़ करें, आपकी फ्री क्रेडिट लिमिट ($0.10) खत्म हो गई है।' },
+        { status: 403 }
+      );
     }
 
+    // 2. Fetch or create ChatSession
+    const activeChatId = chatId || crypto.randomUUID();
+    let session = await ChatSession.findOne({ clerkUserId: userId, chatId: activeChatId });
+    let isNew = false;
+    if (!session) {
+      isNew = true;
+      session = await ChatSession.create({
+        clerkUserId: userId,
+        chatId: activeChatId,
+        title: 'नई बातचीत',
+        messages: []
+      });
+    }
+
+    // 3. Auto-Titling: If new session, generate a Hindi title
+    if (isNew) {
+      try {
+        const titleResponse = await fetch(`${meshConfig.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: meshConfig.headers(),
+          body: JSON.stringify({
+            model: 'openai/gpt-4o-mini',
+            messages: [
+              { role: 'system', content: 'Summarize this prompt in 3-4 Hindi words for a chat title. Output ONLY the words, no punctuation or quotes.' },
+              { role: 'user', content: text }
+            ]
+          })
+        });
+        if (titleResponse.ok) {
+          const titleData = await titleResponse.json();
+          const generatedTitle = titleData.choices?.[0]?.message?.content?.trim();
+          if (generatedTitle) {
+            session.title = generatedTitle;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to generate chat title:', err);
+      }
+    }
+
+    // 4. Save new user message to session
+    session.messages.push({
+      role: 'user',
+      content: text
+    });
+    await session.save();
+
     // Format previous messages cleanly for the Mesh API request payload
-    const formattedHistory = user.conversationHistory.map(msg => ({
+    const formattedHistory = session.messages.map(msg => ({
       role: msg.role === 'assistant' ? 'assistant' : 'user',
       content: msg.content
     }));
 
-    // 2. Call Mesh API completions route
+    // 5. Call Mesh API completions route
     const meshResponse = await fetch(`${meshConfig.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: meshConfig.headers(),
@@ -90,8 +138,8 @@ export async function POST(request) {
       console.error('Mesh API chat completions failed:', errorText);
 
       // Rollback user's latest query from database since transaction failed
-      user.conversationHistory.pop();
-      await user.save();
+      session.messages.pop();
+      await session.save();
 
       return NextResponse.json(
         { error: `Mesh API router returned error: ${meshResponse.statusText}` },
@@ -104,21 +152,25 @@ export async function POST(request) {
 
     if (!aiText) {
       // Rollback on empty response
-      user.conversationHistory.pop();
-      await user.save();
+      session.messages.pop();
+      await session.save();
 
       return NextResponse.json({ error: 'AI returned an empty response.' }, { status: 500 });
     }
 
-    // 3. Save AI response to Mongoose History
-    user.conversationHistory.push({
+    // 6. Save AI response to session
+    session.messages.push({
       role: 'assistant',
       content: aiText
     });
+    await session.save();
+
+    // 7. Update user credits by fixed amount
+    user.creditsUsed = (user.creditsUsed || 0) + 0.005;
     await user.save();
 
-    // 4. Return response text to frontend
-    return NextResponse.json({ response: aiText });
+    // Return response text and active chatId to frontend
+    return NextResponse.json({ response: aiText, chatId: activeChatId });
   } catch (error) {
     console.error('Error in chat API handler:', error);
     return NextResponse.json({ error: 'Internal Server Error: ' + error.message }, { status: 500 });
