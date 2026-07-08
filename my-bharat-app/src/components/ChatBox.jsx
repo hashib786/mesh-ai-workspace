@@ -20,9 +20,9 @@ export default function ChatBox({ messages, isAiTyping, activeSpeechIndex, speak
   };
 
   return (
-    <div className="w-full flex flex-col">
+    <div className="w-full flex flex-col h-full">
       {/* Scrollable messages area */}
-      <div className="w-full h-48 md:h-56 overflow-y-auto px-1 py-3 space-y-4 flex flex-col scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+      <div className="w-full h-full min-h-[200px] overflow-y-auto px-1 py-3 space-y-4 flex flex-col scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 select-none py-10">
             <svg className="h-10 w-10 stroke-current opacity-40 mb-2" fill="none" viewBox="0 0 24 24" strokeWidth="1.5">
@@ -96,11 +96,18 @@ export default function ChatBox({ messages, isAiTyping, activeSpeechIndex, speak
                   {/* Copy Button */}
                   <button
                     onClick={() => copyToClipboard(msg.content, index)}
-                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 transition-all cursor-pointer mr-1"
                     title="Copy text"
                   >
                     {copiedIndex === index ? "कॉपी हुआ!" : "कॉपी करें (Copy)"}
                   </button>
+
+                  {/* Cost display */}
+                  {!isUser && (
+                    <span className="text-[10px] text-slate-400 font-medium select-none">
+                      • लागत (Cost): $0.005
+                    </span>
+                  )}
                 </div>
               </div>
             );

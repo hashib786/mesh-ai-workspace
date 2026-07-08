@@ -48,7 +48,7 @@ export default function DashboardLayout({
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-0 bg-slate-900/40 z-30 md:hidden"
+          className="fixed inset-0 bg-slate-900/40 z-[90] md:hidden"
         />
       )}
 
