@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import dbConnect from '@/src/lib/db';
 import UserProfile from '@/src/models/UserProfile';
 import { meshConfig } from '@/src/lib/meshClient';
@@ -17,15 +18,15 @@ Follow these Strict Behavioral Rules:
 // GET: Returns the persistent conversation history for the default user
 export async function GET() {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     await dbConnect();
-    let user = await UserProfile.findOne();
+    let user = await UserProfile.findOne({ clerkUserId: userId });
     if (!user) {
-      user = await UserProfile.create({
-        name: 'Rural User',
-        language: 'hi-IN',
-        locationType: 'village',
-        conversationHistory: []
-      });
+      return NextResponse.json({ history: [] });
     }
     return NextResponse.json({ history: user.conversationHistory });
   } catch (error) {
@@ -37,6 +38,11 @@ export async function GET() {
 // POST: Accepts a new user message, updates database, retrieves Mesh API response, updates database, and returns AI text
 export async function POST(request) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { text } = body;
 
@@ -45,14 +51,9 @@ export async function POST(request) {
     }
 
     await dbConnect();
-    let user = await UserProfile.findOne();
+    let user = await UserProfile.findOne({ clerkUserId: userId });
     if (!user) {
-      user = await UserProfile.create({
-        name: 'Rural User',
-        language: 'hi-IN',
-        locationType: 'village',
-        conversationHistory: []
-      });
+      return NextResponse.json({ error: 'User profile not initialized.' }, { status: 400 });
     }
 
     // 1. Save new user message to Mongoose History if it was not already logged by STT
@@ -127,9 +128,14 @@ export async function POST(request) {
 // DELETE: Clears the conversation history from the database and optionally adds a greeting
 export async function DELETE(request) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { greeting } = await request.json().catch(() => ({}));
     await dbConnect();
-    let user = await UserProfile.findOne();
+    let user = await UserProfile.findOne({ clerkUserId: userId });
     if (user) {
       user.conversationHistory = [];
       if (greeting) {

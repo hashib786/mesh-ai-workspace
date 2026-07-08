@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import VoiceRecorder from "@/src/components/VoiceRecorder";
 import ChatBox from "@/src/components/ChatBox";
 import useTtsPlayer from "@/src/hooks/useTtsPlayer";
@@ -8,6 +9,11 @@ import { UserButton } from "@clerk/nextjs";
 
 export default function Home() {
   const { activeSpeechIndex, speakText, playAudioUrl, stopPlayback } = useTtsPlayer();
+
+  // Sync user context on mount to initialize MongoDB profile
+  useEffect(() => {
+    fetch("/api/auth/sync").catch((err) => console.error("Sync error:", err));
+  }, []);
 
   const {
     conversationHistory,

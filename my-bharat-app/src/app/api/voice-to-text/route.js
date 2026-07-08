@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import dbConnect from '@/src/lib/db';
 import UserProfile from '@/src/models/UserProfile';
 
 export async function POST(request) {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const formData = await request.formData();
     // Accept audio file from either 'file' or 'audio' field
     const file = formData.get('file') || formData.get('audio');
@@ -61,20 +67,16 @@ export async function POST(request) {
     // Save user query message to MongoDB database log
     try {
       await dbConnect();
-      let user = await UserProfile.findOne();
-      if (!user) {
-        user = new UserProfile({
-          name: 'Rural User',
-          language: 'hi-IN',
-          locationType: 'village',
-          conversationHistory: [],
+      let user = await UserProfile.findOne({ clerkUserId: userId });
+      if (user) {
+        user.conversationHistory.push({
+          role: 'user',
+          content: transcribedText,
         });
+        await user.save();
+      } else {
+        console.warn(`User profile not found for clerkUserId: ${userId} in voice-to-text route.`);
       }
-      user.conversationHistory.push({
-        role: 'user',
-        content: transcribedText,
-      });
-      await user.save();
     } catch (dbError) {
       console.error('Failed to log transcription to database:', dbError);
     }

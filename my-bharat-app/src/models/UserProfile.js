@@ -12,7 +12,15 @@ const MessageSchema = new mongoose.Schema({
 }, { _id: false });
 
 const UserProfileSchema = new mongoose.Schema({
+  clerkUserId: {
+    type: String,
+    unique: true,
+    required: true
+  },
   name: {
+    type: String
+  },
+  email: {
     type: String
   },
   language: {
