@@ -28,7 +28,7 @@ export default function useChatHistory({ playAudioUrl, speakText }) {
   const handleStartConversation = async () => {
     setError("");
     
-    const initialGreetingText = "नमस्ते! मेरा नाम अंजलि है, मैं 24 साल की हूँ। क्या मैं आपका नाम और उम्र जान सकती हूँ?";
+    const initialGreetingText = "नमस्ते! मेरा नाम सुहानी है, मैं 24 साल की हूँ। क्या मैं आपका नाम और उम्र जान सकती हूँ?";
 
     try {
       await fetch("/api/chat", {

@@ -81,7 +81,7 @@ export default function Home() {
               </div>
 
               <h2 className="text-2xl font-black text-slate-800 text-center mb-2">
-                नमस्ते! मैं हूँ आपका <span className="text-sky-600">जन-साथी</span>
+                नमस्ते! मैं हूँ <span className="text-sky-600">सुहानी</span>, आपकी जन-साथी
               </h2>
               <p className="text-sm text-slate-500 text-center max-w-sm mb-8 leading-relaxed font-medium">
                 सरकारी दस्तावेज़ों (जैसे आधार, पैन, पासपोर्ट) से संबंधित किसी भी सहायता के लिए आवाज़ से बातचीत शुरू करें।
